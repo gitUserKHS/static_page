@@ -1,36 +1,34 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width,initial-scale=1.0,user-scalable=no"/>
-  <title>Mini Minecraft – Camera-true Move + Fly</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1.0,user-scalable=no" />
+  <title>Mini Minecraft – Visibility Enhanced</title>
   <style>
-    :root{--u:bg rgba(0,0,0,.4);--u:fg #fff}
+    :root{--ui-bg:rgba(0,0,0,.4);--ui-fg:#fff}
     html,body{margin:0;height:100%;overflow:hidden;background:#000}
     canvas{display:block}
 
-    /* HUD */
+    /* ---------- HUD ---------- */
     #hud{position:fixed;left:12px;top:12px;padding:8px 10px;color:#fff;
-      font:12px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--u:bg);
+      font:12px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--ui-bg);
       border-radius:8px;user-select:none;max-width:min(90vw,440px)}
     #crosshair{position:fixed;left:50%;top:50%;width:14px;height:14px;margin:-7px 0 0 -7px;pointer-events:none}
     #crosshair:before,#crosshair:after{content:"";position:absolute;left:50%;top:50%;background:#fff;transform:translate(-50%,-50%)}
     #crosshair:before{width:14px;height:2px} #crosshair:after{width:2px;height:14px}
 
-    /* Joystick */
+    /* ---------- Mobile Joystick ---------- */
     #joystick{position:fixed;left:18px;bottom:18px;width:96px;height:96px;border-radius:50%;
       background:rgba(255,255,255,.08);touch-action:none;backdrop-filter:blur(2px)}
     #joystick-handle{position:absolute;left:38px;top:38px;width:20px;height:20px;border-radius:50%;
       background:#fff;box-shadow:0 0 10px rgba(255,255,255,.6);pointer-events:none}
 
-    /* Buttons */
-    .act{position:fixed;right:18px;width:64px;height:64px;border-radius:50%;
-      border:0;color:#fff;background:var(--u:bg);font-weight:700;font-size:12px;touch-action:manipulation}
-    #breakBtn{bottom:18px}
-    #placeBtn{bottom:96px}
-    #flyBtn{bottom:174px}
+    /* ---------- Mobile Buttons ---------- */
+    .act{position:fixed;right:18px;width:64px;height:64px;border-radius:50%;border:0;
+      color:#fff;background:var(--ui-bg);font-weight:700;font-size:12px;touch-action:manipulation}
+    #breakBtn{bottom:18px} #placeBtn{bottom:96px} #flyBtn{bottom:174px}
     .fly-vert{position:fixed;right:96px;width:44px;height:44px;border-radius:22px;border:0;
-      color:#fff;background:var(--u:bg);font-weight:700;font-size:14px;touch-action:manipulation;display:none}
+      color:#fff;background:var(--ui-bg);font-weight:700;font-size:14px;touch-action:manipulation;display:none}
     #flyUp{bottom:174px} #flyDown{bottom:126px}
 
     .mobile-only{display:none}
@@ -38,9 +36,10 @@
   </style>
 </head>
 <body>
+  <!-- ---------- HUD & Mobile UI ---------- -->
   <div id="hud">
     <div><b>Mini Minecraft</b></div>
-    <div class="desktop-tip">Desktop: 클릭→마우스락 • WASD 이동 • Space 점프 • Shift ↓(비행) • F 비행 토글 • 좌클릭 파괴 • 우클릭 설치</div>
+    <div class="desktop-tip">Desktop: 클릭→마우스락 • WASD • Space 점프 • Shift 아래(비행) • F 비행 토글 • 좌클릭 파괴 • 우클릭 설치</div>
     <div>Mobile: 드래그 회전 • 조이스틱 이동 • Break/Place • Fly/↑/↓</div>
     <div id="perf"></div>
   </div>
@@ -49,45 +48,55 @@
   <button id="breakBtn" class="act mobile-only">Break</button>
   <button id="placeBtn" class="act mobile-only">Place</button>
   <button id="flyBtn"   class="act mobile-only">Fly</button>
-  <button id="flyUp"   class="fly-vert mobile-only">↑</button>
-  <button id="flyDown" class="fly-vert mobile-only">↓</button>
+  <button id="flyUp"    class="fly-vert mobile-only">↑</button>
+  <button id="flyDown"  class="fly-vert mobile-only">↓</button>
 
   <div id="crosshair"></div>
 
-  <!-- 모듈: 절대 URL (import map 불필요) -->
+  <!-- ---------- MAIN SCRIPT ---------- -->
   <script type="module">
     import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.161.0/build/three.module.js";
     import { createNoise2D } from "https://cdn.jsdelivr.net/npm/simplex-noise@4.0.1/dist/esm/simplex-noise.js";
 
-    // === 기본 ===
-    const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x87ceeb);
-
-    const camera = new THREE.PerspectiveCamera(75, innerWidth/innerHeight, 0.1, 1000);
-    camera.rotation.order = "YXZ";
-
+    /* ===== Renderer & Scene (sRGB + Tone-mapping + Fog) ===== */
     const renderer = new THREE.WebGLRenderer({ antialias:true });
     renderer.setSize(innerWidth, innerHeight);
     renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+    renderer.outputColorSpace     = THREE.SRGBColorSpace;
+    renderer.toneMapping          = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure  = 1.15; // 살짝 밝게
     document.body.appendChild(renderer.domElement);
 
-    const sun = new THREE.DirectionalLight(0xffffff,1);
-    sun.position.set(0.6,1,0.4).multiplyScalar(30);
-    scene.add(sun);
-    scene.add(new THREE.AmbientLight(0xffffff,0.45));
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x87ceeb);
+    scene.fog        = new THREE.Fog(0x87ceeb, 60, 120); // 60~120m 사이 서서히 블렌드
 
-    // === 플레이어 리그 ===
+    /* ===== Camera ===== */
+    const camera = new THREE.PerspectiveCamera(75, innerWidth/innerHeight, 0.05, 1000);
+    camera.rotation.order = "YXZ";
+
+    /* ===== Lighting ===== */
+    const sun = new THREE.DirectionalLight(0xffffff, 1.2);
+    sun.position.set(0.6,1,0.4).multiplyScalar(40);
+    scene.add(sun);
+
+    const hemi = new THREE.HemisphereLight(0xBBE4C3, 0x3a3227, 0.55); // 하늘빛(연녹) / 땅빛(암갈)
+    scene.add(hemi);
+
+    /* ===== Player Rig ===== */
     const player = new THREE.Object3D();
     const pitchNode = new THREE.Object3D();
     pitchNode.add(camera);
     player.add(pitchNode);
     scene.add(player);
-    player.position.set(0,20,0);
-    camera.position.set(0,1.6,0);
 
-    // === 입력 상태 ===
+    camera.position.set(0,1.6,0);
+    player.position.set(0,20,0);
+
+    /* ===== Input State ===== */
     const key = {w:0,a:0,s:0,d:0,space:0,shift:0};
-    let fly=false;
+    let fly = false;
+
     addEventListener("keydown",e=>{
       switch(e.code){
         case"KeyW":key.w=1;break;case"KeyS":key.s=1;break;
@@ -104,25 +113,26 @@
       }
     });
 
-    // === 모바일 조이스틱 ===
-    const isTouch = matchMedia("(pointer:coarse)").matches||"ontouchstart"in window;
-    const joy={x:0,y:0};
+    /* ===== Mobile Joystick & Buttons ===== */
+    const isTouch = matchMedia("(pointer:coarse)").matches || "ontouchstart" in window;
+    const joy = {x:0,y:0};
     if(isTouch){
       const joyEl=document.getElementById("joystick");
-      const handle=document.getElementById("joystick-handle");const MAX=36;let tid=null;
+      const handle=document.getElementById("joystick-handle");
+      const MAX=36; let tid=null;
       joyEl.addEventListener("touchstart",e=>{if(tid===null)tid=e.changedTouches[0].identifier;},{passive:false});
       joyEl.addEventListener("touchmove",e=>{
-        for(const t of e.changedTouches)if(t.identifier===tid){
+        for(const t of e.changedTouches) if(t.identifier===tid){
           const r=joyEl.getBoundingClientRect();
-          const x=t.clientX-(r.left+r.width/2),y=t.clientY-(r.top+r.height/2);
-          const len=Math.min(Math.hypot(x,y),MAX),ang=Math.atan2(y,x);
-          joy.x=(len/MAX)*Math.cos(ang);joy.y=(len/MAX)*Math.sin(ang);
+          const x=t.clientX-(r.left+r.width/2), y=t.clientY-(r.top+r.height/2);
+          const len=Math.min(Math.hypot(x,y),MAX), ang=Math.atan2(y,x);
+          joy.x=(len/MAX)*Math.cos(ang); joy.y=(len/MAX)*Math.sin(ang);
           handle.style.left=(r.width/2-10)+joy.x*MAX+"px";
-          handle.style.top=(r.height/2-10)+joy.y*MAX+"px";
+          handle.style.top =(r.height/2-10)+joy.y*MAX+"px";
           e.preventDefault();
         }
       },{passive:false});
-      const end=()=>{tid=null;joy.x=joy.y=0;handle.style.left="38px";handle.style.top="38px";};
+      const end=()=>{tid=null;joy.x=joy.y=0;handle.style.left="38px";handle.style.top="38px";}
       joyEl.addEventListener("touchend",end);joyEl.addEventListener("touchcancel",end);
 
       document.getElementById("flyBtn").addEventListener("touchstart",()=>{fly=!fly;vel.y=0;updateMobileFlyUI();},{passive:true});
@@ -132,173 +142,190 @@
       document.getElementById("flyDown").addEventListener("touchend",()=>{key.shift=0;},{passive:true});
     }
     function updateMobileFlyUI(){
-      if(!isTouch)return;
+      if(!isTouch) return;
       const s=fly?"block":"none";
       document.getElementById("flyUp").style.display=s;
       document.getElementById("flyDown").style.display=s;
     }
 
-    // === 시선 제어 ===
+    /* ===== Look Control ===== */
     let yaw=0,pitch=0;
-    const clamp=(v,lo,hi)=>Math.max(lo,Math.min(hi,v));
+    const clamp=(v,l,h)=>Math.max(l,Math.min(h,v));
     if(!isTouch){
       document.body.addEventListener("click",()=>document.body.requestPointerLock?.());
       addEventListener("mousemove",e=>{
         if(document.pointerLockElement===document.body){
-          yaw-=e.movementX*0.0025;
-          pitch=clamp(pitch-e.movementY*0.0025,-Math.PI/2+0.01,Math.PI/2-0.01);
+          yaw   -= e.movementX*0.0025;
+          pitch  = clamp(pitch - e.movementY*0.0025, -Math.PI/2+0.01, Math.PI/2-0.01);
         }
       });
     }else{
-      let drag=false,px=0,py=0;
+      let dragging=false,px=0,py=0;
       addEventListener("touchstart",e=>{
-        const t=e.target;if(t.id.startsWith("joy")||t.classList.contains("act")||t.classList.contains("fly-vert"))return;
-        drag=true;px=e.touches[0].clientX;py=e.touches[0].clientY;
+        const t=e.target;
+        if(t.id.startsWith("joy")||t.classList.contains("act")||t.classList.contains("fly-vert")) return;
+        dragging=true; px=e.touches[0].clientX; py=e.touches[0].clientY;
       },{passive:true});
       addEventListener("touchmove",e=>{
-        if(!drag)return;const cx=e.touches[0].clientX,cy=e.touches[0].clientY;
-        const dx=cx-px,dy=cy-py;px=cx;py=cy;
-        yaw-=dx*0.005;pitch=clamp(pitch-dy*0.005,-Math.PI/2+0.01,Math.PI/2-0.01);
+        if(!dragging) return;
+        const cx=e.touches[0].clientX, cy=e.touches[0].clientY;
+        const dx=cx-px, dy=cy-py; px=cx; py=cy;
+        yaw   -= dx*0.005;
+        pitch  = clamp(pitch - dy*0.005, -Math.PI/2+0.01, Math.PI/2-0.01);
       },{passive:true});
-      addEventListener("touchend",()=>drag=false,{passive:true});
-      addEventListener("touchcancel",()=>drag=false,{passive:true});
+      addEventListener("touchend",()=>dragging=false,{passive:true});
+      addEventListener("touchcancel",()=>dragging=false,{passive:true});
     }
     function applyLook(){player.rotation.y=yaw;camera.rotation.x=pitch;}
 
-    // === 월드 (청크) ===
+    /* ===== World (chunked) ===== */
     const CHUNK=16,RADIUS=2;
     const blockGeo=new THREE.BoxGeometry(1,1,1);
-    const MAT_DIRT=new THREE.MeshLambertMaterial({color:0x8B5A2B});
-    const MAT_GRASS=new THREE.MeshLambertMaterial({color:0x4CAF50});
-    const blocksGroup=new THREE.Group();scene.add(blocksGroup);
-    const blocks=new Set();const chunks=new Map();
+    const MAT_DIRT = new THREE.MeshLambertMaterial({color:0x9B673F});
+    const MAT_GRASS= new THREE.MeshLambertMaterial({color:0x66C94E});
+
+    const blocksGroup=new THREE.Group(); scene.add(blocksGroup);
+    const blocks=new Set(); const chunks=new Map();
     const noise2D=createNoise2D();
 
     const keyOf=(x,y,z)=>`${x},${y},${z}`;
-    const hasBlock=(x,y,z)=>blocks.has(keyOf(Math.floor(x),Math.floor(y),Math.floor(z)));
+    const hasBlock=(x,y,z)=>blocks.has(keyOf(x|0,y|0,z|0));
     const chunkKey=(cx,cz)=>`${cx},${cz}`;
-    const heightAt=(x,z)=>Math.floor((noise2D(x/18,z/18)+1)*4+(noise2D(x/48,z/48)+1)*2-2);
+    const heightAt=(x,z)=>Math.floor((noise2D(x/18,z/18)+1)*4 + (noise2D(x/48,z/48)+1)*2 -2);
+
     function genChunk(cx,cz){
-      const ck=chunkKey(cx,cz);if(chunks.has(ck))return;
-      const g=new THREE.Group();g.userData.cx=cx;g.userData.cz=cz;
+      const k=chunkKey(cx,cz); if(chunks.has(k)) return;
+      const g=new THREE.Group(); g.userData.cx=cx; g.userData.cz=cz;
       for(let lx=0;lx<CHUNK;lx++)for(let lz=0;lz<CHUNK;lz++){
-        const x=cx*CHUNK+lx,z=cz*CHUNK+lz,h=heightAt(x,z);
+        const x=cx*CHUNK+lx, z=cz*CHUNK+lz, h=heightAt(x,z);
         for(let y=-2;y<=h;y++){
-          const m=new THREE.Mesh(blockGeo,y===h?MAT_GRASS:MAT_DIRT);
-          m.position.set(x,y,z);g.add(m);blocks.add(keyOf(x,y,z));
+          const m=new THREE.Mesh(blockGeo, y===h?MAT_GRASS:MAT_DIRT);
+          m.position.set(x,y,z); g.add(m); blocks.add(keyOf(x,y,z));
         }
       }
-      chunks.set(ck,g);blocksGroup.add(g);
+      chunks.set(k,g); blocksGroup.add(g);
     }
-    function unloadFarChunks(cx,cz){
-      for(const [k,g]of chunks){
+    function unloadFar(cx,cz){
+      for(const [k,g] of chunks){
         if(Math.max(Math.abs(g.userData.cx-cx),Math.abs(g.userData.cz-cz))>RADIUS+1){
-          for(const m of g.children)blocks.delete(keyOf(m.position.x,m.position.y,m.position.z));
-          blocksGroup.remove(g);chunks.delete(k);
-          g.traverse(o=>{if(o.isMesh)o.geometry.dispose?.();});
+          for(const o of g.children) blocks.delete(keyOf(o.position.x,o.position.y,o.position.z));
+          blocksGroup.remove(g); chunks.delete(k); g.traverse(o=>{if(o.isMesh)o.geometry.dispose?.();});
         }
       }
     }
     let lastCx=Infinity,lastCz=Infinity;
     function ensureWorld(px,pz){
-      const cx=Math.floor(px/CHUNK),cz=Math.floor(pz/CHUNK);
-      if(cx===lastCx&&cz===lastCz)return;lastCx=cx;lastCz=cz;
-      for(let dz=-RADIUS;dz<=RADIUS;dz++)for(let dx=-RADIUS;dx<=RADIUS;dx++)genChunk(cx+dx,cz+dz);
-      unloadFarChunks(cx,cz);
+      const cx=Math.floor(px/CHUNK), cz=Math.floor(pz/CHUNK);
+      if(cx===lastCx&&cz===lastCz) return;
+      lastCx=cx; lastCz=cz;
+      for(let dz=-RADIUS;dz<=RADIUS;dz++)for(let dx=-RADIUS;dx<=RADIUS;dx++) genChunk(cx+dx,cz+dz);
+      unloadFar(cx,cz);
     }
     genChunk(0,0);
 
-    // === 움직임 / 물리 ===
-    const clock=new THREE.Clock();
-    const eye=1.8,speedWalk=6,speedFly=10,gravity=18;
-    let canJump=false;
+    /* ===== AABB Collision ===== */
+    const BOX_W=0.3, BOX_H=1.8, eye=1.6;
+    const overlaps=(px,py,pz)=>{
+      const minX=Math.floor(px-BOX_W), maxX=Math.floor(px+BOX_W);
+      const minY=Math.floor(py-BOX_H), maxY=Math.floor(py);
+      const minZ=Math.floor(pz-BOX_W), maxZ=Math.floor(pz+BOX_W);
+      for(let x=minX;x<=maxX;x++)
+        for(let y=minY;y<=maxY;y++)
+          for(let z=minZ;z<=maxZ;z++)
+            if(hasBlock(x,y,z)) return true;
+      return false;
+    };
     const vel=new THREE.Vector3();
-    const tmpForward=new THREE.Vector3(),tmpRight=new THREE.Vector3(),moveVec=new THREE.Vector3();
-    function moveAndCollide(dt){
-      /* 1. 카메라 시점 방향 → 수평 forward/right */
-      camera.getWorldDirection(tmpForward);
-      tmpForward.y=0;tmpForward.normalize();               // forward
-      tmpRight.crossVectors(tmpForward,new THREE.Vector3(0,1,0)).normalize(); // right
+    const speedWalk=6, speedFly=10, gravity=18;
+    const forward=new THREE.Vector3(), right=new THREE.Vector3(), moveVec=new THREE.Vector3();
+    function tryMove(axis,delta){
+      if(delta===0) return;
+      const pos=player.position; pos[axis]+=delta;
+      if(overlaps(pos.x,pos.y,pos.z)){
+        const dir=Math.sign(delta), step=-dir*0.02;
+        while(overlaps(pos.x,pos.y,pos.z)) pos[axis]+=step;
+        vel[axis]=0;
+      }
+    }
+    let canJump=false;
+    function move(dt){
+      camera.getWorldDirection(forward);
+      forward.y=0; forward.normalize();
+      right.crossVectors(forward,new THREE.Vector3(0,1,0)).normalize();
 
-      /* 2. 입력 합성 */
       const inFwd=(key.w-key.s)+(isTouch?joy.y:0);
       const inStr=(key.d-key.a)+(isTouch?joy.x:0);
+      moveVec.set(0,0,0).addScaledVector(forward,inFwd).addScaledVector(right,inStr);
+      if(moveVec.lengthSq()>0) moveVec.normalize().multiplyScalar((fly?speedFly:speedWalk)*dt);
 
-      moveVec.set(0,0,0)
-        .addScaledVector(tmpForward,inFwd)
-        .addScaledVector(tmpRight,inStr);
-
-      if(moveVec.lengthSq()>0){
-        moveVec.normalize().multiplyScalar((fly?speedFly:speedWalk)*dt);
-      }
-
-      /* 3. 수평 충돌 */
-      const pos=player.position;
-      if(!hasBlock(pos.x+moveVec.x,pos.y,pos.z)&&!hasBlock(pos.x+moveVec.x,pos.y-eye,pos.z))
-        pos.x+=moveVec.x;
-      if(!hasBlock(pos.x,pos.y,pos.z+moveVec.z)&&!hasBlock(pos.x,pos.y-eye,pos.z+moveVec.z))
-        pos.z+=moveVec.z;
-
-      /* 4. 수직 / 중력 */
       if(fly){
         vel.y=((key.space?1:0)-(key.shift?1:0))*speedFly;
       }else{
         vel.y-=gravity*dt;
-        if(key.space&&canJump){vel.y=7;canJump=false;}
+        if(key.space&&canJump){ vel.y=7; canJump=false; }
       }
-      pos.y+=vel.y*dt;
-      if(!fly&&hasBlock(pos.x,pos.y-eye,pos.z)){
-        pos.y=Math.floor(pos.y-eye)+1+eye;vel.y=0;canJump=true;
-      }else if(!fly){canJump=false;}
+
+      tryMove('x',moveVec.x);
+      tryMove('z',moveVec.z);
+      tryMove('y',vel.y*dt);
+
+      canJump=overlaps(player.position.x,player.position.y-BOX_H-0.05,player.position.z);
     }
 
-    // === 빌드 / 파괴 ===
+    /* ===== Build / Break ===== */
     const raycaster=new THREE.Raycaster();
     const center=new THREE.Vector2(0,0);
     function breakBlock(){
       raycaster.setFromCamera(center,camera);
       const hits=raycaster.intersectObjects(blocksGroup.children,true);
       if(hits.length){
-        const o=hits[0].object,p=o.position;
-        blocks.delete(keyOf(p.x,p.y,p.z));
-        o.parent.remove(o);o.geometry.dispose?.();
+        const o=hits[0].object,p=o.position; blocks.delete(keyOf(p.x,p.y,p.z));
+        o.parent.remove(o); o.geometry.dispose?.();
       }
     }
     function placeBlock(){
       raycaster.setFromCamera(center,camera);
       const hits=raycaster.intersectObjects(blocksGroup.children,true);
       if(hits.length){
-        const hit=hits[0];
-        const pos=hit.object.position.clone().add(hit.face.normal).round();
-        const k=keyOf(pos.x,pos.y,pos.z);
-        if(!blocks.has(k)){
-          const cube=new THREE.Mesh(blockGeo,(!hasBlock(pos.x,pos.y+1,pos.z)?MAT_GRASS:MAT_DIRT));
-          cube.position.copy(pos);
-          (chunks.get(chunkKey(Math.floor(pos.x/CHUNK),Math.floor(pos.z/CHUNK)))||blocksGroup).add(cube);
-          blocks.add(k);
-        }
+        const hit=hits[0], pos=hit.object.position.clone().add(hit.face.normal).round();
+        const k=keyOf(pos.x,pos.y,pos.z); if(blocks.has(k)) return;
+        const cube=new THREE.Mesh(blockGeo, !hasBlock(pos.x,pos.y+1,pos.z)?MAT_GRASS:MAT_DIRT);
+        cube.position.copy(pos);
+        (chunks.get(chunkKey(Math.floor(pos.x/CHUNK),Math.floor(pos.z/CHUNK)))||blocksGroup).add(cube);
+        blocks.add(k);
       }
     }
-    addEventListener("mousedown",e=>{if(isTouch)return; if(e.button===0)breakBlock(); if(e.button===2)placeBlock();});
+    addEventListener("mousedown",e=>{ if(isTouch) return; if(e.button===0) breakBlock(); if(e.button===2) placeBlock(); });
     addEventListener("contextmenu",e=>e.preventDefault());
     if(isTouch){
       document.getElementById("breakBtn").addEventListener("touchstart",breakBlock,{passive:true});
       document.getElementById("placeBtn").addEventListener("touchstart",placeBlock,{passive:true});
     }
 
-    // === 리사이즈 ===
-    addEventListener("resize",()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);});
+    /* ===== Resize ===== */
+    addEventListener("resize",()=>{
+      camera.aspect=innerWidth/innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(innerWidth,innerHeight);
+    });
 
-    // === 메인 루프 ===
-    const perfEl=document.getElementById("perf");let acc=0,frames=0,last=0;
-    function animate(){
-      requestAnimationFrame(animate);
+    /* ===== Main Loop ===== */
+    const perf=document.getElementById("perf");
+    const clock=new THREE.Clock();
+    let acc=0,frames=0;
+    function loop(){
+      requestAnimationFrame(loop);
       const dt=clock.getDelta();
-      applyLook();moveAndCollide(dt);ensureWorld(player.position.x,player.position.z);
+
+      applyLook();
+      move(dt);
+      ensureWorld(player.position.x,player.position.z);
       renderer.render(scene,camera);
-      acc+=dt;frames++;if(acc>0.25){const fps=Math.round(frames/acc);perfEl.textContent=`FPS ${fps} | Fly ${fly?"ON":"OFF"}`;acc=0;frames=0;}
+
+      acc+=dt; frames++;
+      if(acc>0.25){ perf.textContent=`FPS ${Math.round(frames/acc)} | Fly ${fly?"ON":"OFF"}`; acc=0; frames=0; }
     }
-    animate();
+    loop();
   </script>
 </body>
 </html>
